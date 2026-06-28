@@ -58,7 +58,8 @@ A **Representation** renders the pure graph for a target. Interchangeable target
   on context node(s), emits nearest neighbors ranked by edge weight to a budget,
   and emits navigable `kg://` links for relevant-but-unexpanded neighbors. It never
   returns the whole graph.
-- `spa` — the browser explorer (`kbexplorer-template`).
+- `spa` — the browser explorer (`kbexplorer-template`). See the
+  **[live showcase](https://anokye-labs.github.io/kbexplorer/)**.
 
 ## Extension points
 
