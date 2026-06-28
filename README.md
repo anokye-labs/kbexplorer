@@ -20,6 +20,14 @@ This repo holds **no application code**. The code lives in:
     not per resource type, and resources carry hypermedia `links`),
   - the provider and representation **extension points** (bring your own local or
     third-party providers and render targets).
-- a deployed **showcase** of kbexplorer (added by a follow-up task).
+- a deployed **showcase** of kbexplorer — the `spa` representation rendering a
+  sample knowledge base in the browser.
+
+## Live showcase
+
+**<https://anokye-labs.github.io/kbexplorer/>** — the
+[`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) SPA,
+built in self-contained local mode over a sample knowledge base and published to
+GitHub Pages from this repo.
 
 > See [`docs/architecture.md`](docs/architecture.md) for the system overview.

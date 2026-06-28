@@ -347,7 +347,7 @@ maps a target name to its implementation (parallel to the provider registry).
 
 | Target | File | Output |
 |---|---|---|
-| `spa` | [`targets/spa.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/spa.tsx) | the interactive explorer website (React route tree) |
+| `spa` | [`targets/spa.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/spa.tsx) | the interactive explorer website (React route tree) — see the **[live showcase](https://anokye-labs.github.io/kbexplorer/)** |
 | `json-ld` | [`targets/json-ld.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/json-ld.ts) | deterministic, canonicalized JSON-LD `@graph` |
 | `llm-context` | [`targets/llm-context.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/llm-context.ts) | **neighbour-anchored**, token-budgeted Markdown pack |
 
