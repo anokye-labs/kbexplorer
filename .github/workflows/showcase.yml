@@ -1,0 +1,97 @@
+name: showcase
+
+# Builds the kbexplorer-template SPA (pinned to a release tag) in self-contained
+# local mode and deploys it to GitHub Pages as the docs repo's live showcase:
+#   https://anokye-labs.github.io/kbexplorer/
+#
+# This repo holds no application code (see AGENTS.md). The template is cloned and
+# built in CI only — nothing from it is committed here. Local mode bakes a manifest
+# at build time, so the deployed bundle needs no runtime GitHub token or API calls.
+#
+# Not a required status check: it never gates PRs / auto-merge. It deploys after a
+# merge to main, on demand, or on a daily schedule. NOTE: agent auto-merges are made
+# with GITHUB_TOKEN, which does not emit a `push` event (anti-recursion), so the very
+# first publish after a bot merge comes from `workflow_dispatch` or the daily `schedule`.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Daily rebuild keeps the baked, repo-aware content (issues / PRs) reasonably fresh
+  # at the pinned template tag, and backstops bot merges that emit no `push` event.
+  schedule:
+    - cron: '17 4 * * *'
+
+# The template release tag to build. Bump via a normal issue-first PR when a new
+# template release ships (the template advises host repos to pin to a tag, not main).
+env:
+  TEMPLATE_REPO: anokye-labs/kbexplorer-template
+  TEMPLATE_REF: v0.2.0
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize Pages deploys; never cancel a deploy mid-flight.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out template (pinned)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.TEMPLATE_REPO }}
+          ref: ${{ env.TEMPLATE_REF }}
+          path: template
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: template/package-lock.json
+
+      - name: Install dependencies
+        working-directory: template
+        run: npm ci
+
+      # Local mode: bake config + authored content + file tree + README + (best-effort)
+      # issues/PRs into src/generated/repo-manifest.json so the bundle is self-contained.
+      - name: Generate manifest
+        working-directory: template
+        run: node scripts/generate-manifest.js
+        env:
+          VITE_KB_LOCAL: 'true'
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build
+        working-directory: template
+        run: npx vite build
+        env:
+          VITE_KB_LOCAL: 'true'
+          VITE_BASE_PATH: /kbexplorer/
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Copy index.html to 404.html for SPA routing
+        working-directory: template
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: template/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
