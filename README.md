@@ -20,6 +20,9 @@ This repo holds **no application code**. The code lives in:
     not per resource type, and resources carry hypermedia `links`),
   - the provider and representation **extension points** (bring your own local or
     third-party providers and render targets).
+- [`docs/adoption-paved-path.md`](docs/adoption-paved-path.md) — a holistic
+  adoption roadmap for making kbx integration into another repository a guided,
+  diagnosable path.
 - a deployed **showcase** of kbexplorer — the `spa` representation rendering a
   sample knowledge base in the browser.
 
