@@ -26,7 +26,7 @@ on:
 # template release ships (the template advises host repos to pin to a tag, not main).
 env:
   TEMPLATE_REPO: anokye-labs/kbexplorer-template
-  TEMPLATE_REF: v0.2.0
+  TEMPLATE_REF: v0.3.0
 
 permissions:
   contents: read
@@ -50,6 +50,13 @@ jobs:
           ref: ${{ env.TEMPLATE_REF }}
           path: template
 
+      # This (showcase) repo is the content HOST: its `content/` is rendered as the
+      # knowledge base. The template reads it via VITE_KB_HOST_ROOT (set below).
+      - name: Check out showcase host content
+        uses: actions/checkout@v7
+        with:
+          path: host
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -67,6 +74,7 @@ jobs:
         run: node scripts/generate-manifest.js
         env:
           VITE_KB_LOCAL: 'true'
+          VITE_KB_HOST_ROOT: ${{ github.workspace }}/host
           GH_TOKEN: ${{ github.token }}
 
       - name: Build
@@ -74,6 +82,7 @@ jobs:
         run: npx vite build
         env:
           VITE_KB_LOCAL: 'true'
+          VITE_KB_HOST_ROOT: ${{ github.workspace }}/host
           VITE_BASE_PATH: /kbexplorer/
           GH_TOKEN: ${{ github.token }}
 
