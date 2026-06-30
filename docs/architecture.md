@@ -46,6 +46,11 @@ flowchart LR
 - [Extension points](#extension-points)
 - [Where things live](#where-things-live)
 
+> **See also — the kbx story:** [personas](personas.md) ·
+> [journeys](journeys.md) · [user-story demand map](user-stories.md) ·
+> [roadmap & program](roadmap.md). This document covers *how kbx is built*; those cover
+> *who it is for and what gets built next*.
+
 ## The one-way dependency rule
 
 The single invariant that makes the system decoupled:

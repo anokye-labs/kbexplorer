@@ -26,6 +26,22 @@ This repo holds **no application code**. The code lives in:
 - a deployed **showcase** of kbexplorer — the `spa` representation rendering a
   sample knowledge base in the browser.
 
+## The kbx story
+
+Beyond the architecture, this repo tells the **full kbx story** so a reader — or an
+agent — can understand who kbx is for and how it gets built:
+
+- [`docs/personas.md`](docs/personas.md) — the people who use kbx.
+- [`docs/journeys.md`](docs/journeys.md) — end-to-end persona journeys.
+- [`docs/user-stories.md`](docs/user-stories.md) — the user-story **demand map**
+  (families A–K), each story linked to the issue that delivers it.
+- [`docs/roadmap.md`](docs/roadmap.md) — the two programs (foundation + plugin) and the
+  cross-repo, wave-by-wave execution plan.
+
+Together these close the loop: start from a person's need and walk to the code that
+satisfies it, or start from an epic and find who it is for. The work is tracked under
+[#23](https://github.com/anokye-labs/kbexplorer/issues/23).
+
 ## Live showcase
 
 **<https://anokye-labs.github.io/kbexplorer/>** — the
