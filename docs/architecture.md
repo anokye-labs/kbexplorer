@@ -43,6 +43,7 @@ flowchart LR
 - [Layer 3 — Engine](#layer-3--engine)
 - [Layer 4 — Representation](#layer-4--representation)
 - [Cross-cutting — identity & relations](#cross-cutting--identity--relations)
+- [The do-seam — affordances as a protocol-neutral action layer](#the-do-seam--affordances-as-a-protocol-neutral-action-layer)
 - [Extension points](#extension-points)
 - [Where things live](#where-things-live)
 
@@ -50,6 +51,12 @@ flowchart LR
 > [journeys](journeys.md) · [user-story demand map](user-stories.md) ·
 > [roadmap & program](roadmap.md). This document covers *how kbx is built*; those cover
 > *who it is for and what gets built next*.
+>
+> **See also — the surfaces, history, and open questions:**
+> [the two surfaces](surfaces.md) covers the SPA showcase vs the embeddable
+> Copilot canvas in depth; [history](history.md) is a verified, chronological
+> account of how kbx got here; [decisions](decisions/) records design choices
+> (made and still-open) worth preserving.
 
 ## The one-way dependency rule
 
@@ -348,13 +355,22 @@ interface Representation<Out = string> {
 
 A [`RepresentationRegistry`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/registry.ts)
 maps a target name to its implementation (parallel to the provider registry).
-`createDefaultRegistry()` pre-populates the three interchangeable built-ins:
+`createDefaultRegistry()`
+([`targets/index.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/index.ts))
+pre-populates four interchangeable built-ins:
 
 | Target | File | Output |
 |---|---|---|
 | `spa` | [`targets/spa.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/spa.tsx) | the interactive explorer website (React route tree) — see the **[live showcase](https://anokye-labs.github.io/kbexplorer/)** |
 | `json-ld` | [`targets/json-ld.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/json-ld.ts) | deterministic, canonicalized JSON-LD `@graph` |
 | `llm-context` | [`targets/llm-context.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/llm-context.ts) | **neighbour-anchored**, token-budgeted Markdown pack |
+| `copilot` | [`targets/copilot.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/copilot.tsx) | the embeddable, agent-driven Copilot canvas surface — see [surfaces](surfaces.md) |
+
+`copilot` is the newest target (registered by
+[template#442](https://github.com/anokye-labs/kbexplorer-template/pull/442),
+shipped in template `v0.4.0`). It proves the thesis of this whole layer: a
+**fourth** way to render the identical pure `KBGraph`, added with zero change to
+core, the engine, or the other three targets.
 
 ### `json-ld` — deterministic linked data
 
@@ -419,6 +435,50 @@ across providers and layers:
   by `mapRelation` (unknown phrasings fall back to `structural`). It is the
   shared normalization target so the same prose resolves to the same relation in
   the CLI's JSON-LD and the SPA's graph alike.
+
+---
+
+## The do-seam — affordances as a protocol-neutral action layer
+
+Everything above is about **reading** the graph. kbx also has a **write/act**
+seam — the **DO-seam** — for the agent-driven surfaces (the CLI, the Copilot
+canvas). It is a separate, later-arriving layer on top of the four
+representation layers, not a fifth core layer: it lives entirely in
+[`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli), delivered by
+[kbexplorer#21 "Epic: Affordance action layer (the DO-seam), job layer and
+consent"](https://github.com/anokye-labs/kbexplorer/issues/21) (closed).
+
+### One choke point, many delivery adapters
+
+An **affordance** is a typed action — "given this context, what can I do, with
+what inputs/outputs?" — implemented once, behind one function:
+[`executeAffordance()`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/affordances/index.js).
+It knows nothing about MCP, JSON-RPC, HTTP, or canvases. Consent is enforced
+**inside** that one function
+([`src/affordances/consent.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/affordances/consent.js))
+— **fail-closed**: an affordance that requires consent and doesn't have it
+raises `CONSENT_REQUIRED`/`CONSENT_DENIED` rather than proceeding, regardless of
+which adapter called it.
+
+Three interchangeable adapters call the same choke point — none of them
+re-implement or bypass consent:
+
+| Adapter | Where | Notes |
+|---|---|---|
+| **Extension-tool adapter** (primary) | [`src/extension/tools.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/extension/tools.js) | Registers affordances as built-in `tools` in the **same** `joinSession({ canvases, tools })` call that ships the canvas — in-process, no MCP config exists or is consulted on this path. |
+| **MCP adapter** (optional) | [`src/mcp/server.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/mcp/server.js), [`src/mcp/tools.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/mcp/tools.js) | The same affordances exposed as an MCP server for non-canvas hosts (plain `copilot -p`, other agents/clients). MCP config only matters here. |
+| **Canvas do-seam adapter** | [`src/extension/canvas-server.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/extension/canvas-server.js) `POST /affordance/:name` | The loopback HTTP route the embeddable canvas calls for its `anchor`/`expand`/`trace`/`filter` actions ([template#194 / A5](https://github.com/anokye-labs/kbexplorer-cli/issues/194)). Routes straight through `executeAffordance` — same fail-closed gate, third surface after extension-tools and MCP. |
+
+The dependency arrow is **`affordances → {extension-tool adapter, MCP adapter,
+canvas adapter}`** — never the other direction, and never affordances coupled
+to any one protocol. A **job layer**
+([`kbexplorer-cli#154`](https://github.com/anokye-labs/kbexplorer-cli/issues/154))
+sits alongside the contract for long-running work (generation, indexing) that a
+single stateless call can't express — progress, cancellation, and
+review/approval are job-layer concerns, not adapter concerns.
+
+See [surfaces.md](surfaces.md) for how the canvas adapter fits into the
+loopback contract end to end.
 
 ---
 
