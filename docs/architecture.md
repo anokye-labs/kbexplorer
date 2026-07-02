@@ -128,17 +128,12 @@ fully writable worktrees through the *same* interface.
 #### Resources are self-describing and navigable
 
 A [`Resource`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/source.ts)
-carries everything a consumer needs without a second round-trip:
-
-```ts
-interface Resource<T = unknown> {
-  href: string;            // stable locator for re-retrieval
-  kind: string;            // open: 'file' | 'tree' | 'commit' | 'issue' | …
-  affordances: Affordance[]; // what's allowed on THIS retrieval (situational)
-  links: ResourceLink[];   // hypermedia: { rel, href, type?, title? }
-  body: T;                 // payload; shape depends on kind
-}
-```
+carries everything a consumer needs without a second round-trip: a stable
+`href` locator for re-retrieval, an open `kind` string, the `affordances`
+allowed on *this* retrieval (situational, see below), hypermedia `links`, and
+a `body` payload whose shape depends on `kind`. See the
+[`Resource` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/source.ts)
+for the exact field types.
 
 #### Affordances are advertised **per retrieval**, never per type or per instance
 
@@ -221,17 +216,12 @@ Contract tests live in
 A **`GraphProvider`**
 ([`provider.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts))
 turns resources (and the graph fragments earlier providers produced) into a pure
-graph fragment of nodes + edges:
-
-```ts
-interface GraphProvider {
-  id: string;
-  name: string;
-  dependencies?: string[];        // resolution ordering
-  requiredAffordances?: Affordance[]; // engine fails fast if unmet on retrieval
-  resolve(context: ProviderContext): Promise<{ nodes: KBNode[]; edges: KBEdge[] }>;
-}
-```
+graph fragment of nodes + edges. Every provider carries an `id`/`name`, an
+optional `dependencies` list that fixes its resolution order, an optional
+`requiredAffordances` the engine checks before running it, and a `resolve()`
+method returning `{ nodes, edges }`. See the
+[`GraphProvider` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts)
+for the exact shape.
 
 A provider may declare:
 
@@ -345,14 +335,11 @@ runs; it is transparent to the contract and produces the same `KBGraph`.
 
 A **`Representation`**
 ([`representation.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts))
-renders the **pure** `KBGraph` (plus options) for a target:
-
-```ts
-interface Representation<Out = string> {
-  target: RepresentationTarget;   // 'spa' | 'json-ld' | 'llm-context' | (open)
-  render(graph: KBGraph, options?: RepresentationOptions): Out | Promise<Out>;
-}
-```
+renders the **pure** `KBGraph` (plus options) for a target: it names an open
+`target` string (`'spa'` | `'json-ld'` | `'llm-context'` | …) and implements
+`render(graph, options?)`. See the
+[`Representation` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts)
+for the exact shape.
 
 A [`RepresentationRegistry`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/registry.ts)
 maps a target name to its implementation (parallel to the provider registry).
