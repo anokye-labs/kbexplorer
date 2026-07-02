@@ -42,6 +42,7 @@ flowchart LR
 - [Layer 2 — Providers](#layer-2--providers)
 - [Layer 3 — Engine](#layer-3--engine)
 - [Layer 4 — Representation](#layer-4--representation)
+- [Search — a first-class representation over the graph](#search--a-first-class-representation-over-the-graph)
 - [Cross-cutting — identity & relations](#cross-cutting--identity--relations)
 - [The do-seam — affordances as a protocol-neutral action layer](#the-do-seam--affordances-as-a-protocol-neutral-action-layer)
 - [Extension points](#extension-points)
@@ -416,6 +417,80 @@ deliberately kept *out* of the pure data types in core.
 
 ---
 
+## Search — a first-class representation over the graph
+
+The four layers above are about *rendering* the graph. A sibling module —
+[`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search), its
+own repo and package, not a `RepresentationTarget` registered inside
+`kbexplorer-template` — consumes the same graph for a different purpose:
+**semantic search**. The layering contract stays exactly as everywhere else in
+this document:
+
+> **kbexplorer defines and renders the knowledge graph; `kbexplorer-search`
+> derives, validates, and serves semantic search over it.**
+
+It is driven end-to-end through the
+[`kbx` CLI](https://github.com/anokye-labs/kbexplorer-cli), never invoked
+directly by a content author:
+
+```mermaid
+flowchart LR
+  Content[("content/<br/>knowledge graph")]
+  Index["kbx search-index<br/>extract + embed"]
+  Artifacts[(".search/<br/>index-meta.json · units.json · vectors.json")]
+  Serve["kbx search-serve /<br/>npx kbexplorer-search serve"]
+  SPA["kbexplorer-template SPA<br/>POST /search"]
+  Content --> Index --> Artifacts --> Serve --> SPA
+```
+
+### Index production
+
+`kbx search-index` reads the knowledge graph, derives searchable units,
+generates embeddings through a pluggable provider, and writes **checked-in,
+deterministic artifacts** (`index-meta.json`, `units.json`, `vectors.json`) —
+the repository owns the search corpus; no hosted service is required to
+produce it. `kbx search-index --check` is a pure, no-API-call drift gate
+suitable for CI, the same checked-in-artifact-plus-drift-gate pattern kbx
+already uses for cross-source connection artifacts (see
+[history.md](history.md)).
+
+### Index consumption
+
+`kbx search-serve` (equivalently `npx @anokye-labs/kbexplorer-search serve
+--dir .search --port <port>`) loads the checked-in artifacts, builds an
+in-memory vector index, embeds incoming queries, and exposes a small HTTP
+contract (`GET /health`, `GET /stats`, `POST /search`) that returns
+kbexplorer-native results — node IDs, titles, paths, clusters, snippets,
+scores, and graph-aware context.
+[`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) is
+the reference consumer: its SPA calls `POST /search` against whatever service
+`VITE_SEARCH_SERVICE_URL` points at.
+
+### Access labels — search never evaluates principals
+
+Search respects the same access labels carried on nodes and edges: by
+default, restricted/confidential/unknown content produces no search unit and
+no vector at all (it cannot leak via search, not even a title), or can be
+opted into an index-but-label posture for host-side filtering. As everywhere
+else in kbx, kbx **labels**, the host **enforces** — search performs no
+principal evaluation of its own. See the [access labels section of the
+`kbexplorer-search` README](https://github.com/anokye-labs/kbexplorer-search#access-labels)
+for the exact contract; this document does not restate the types.
+
+### Status
+
+Tracked end to end by
+[kbexplorer-search#5](https://github.com/anokye-labs/kbexplorer-search/issues/5)
+("Epic: make kbexplorer-search a first-class part of the kbx system"). As of
+this writing, `kbexplorer-search` still inlines a mirror of the core graph
+types rather than depending on `@anokye-labs/kbexplorer-core` directly
+([search#7](https://github.com/anokye-labs/kbexplorer-search/issues/7)); the
+`serve` bin and template contract parity (`graphRanking` / `suggestions`)
+landed via
+[search#6](https://github.com/anokye-labs/kbexplorer-search/issues/6).
+
+---
+
 ## Cross-cutting — identity & relations
 
 Two small contracts keep representations of the same real-world entity lined up
@@ -672,6 +747,7 @@ guard enforces for the built-ins.
 | Providers | [`provider.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts) | [`src/engine/providers.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/providers.ts) · [`plugin-loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/plugin-loader.ts) |
 | Engine | [`graph.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/graph.ts) | [`loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/loader.ts) · [`orchestrator.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/orchestrator.ts) · [`transforms.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/transforms.ts) |
 | Representation | [`representation.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts) | [`src/representation/`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/registry.ts) |
+| Search (index production + consumption) | *(not yet — search#7)* | [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) (separate repo/package), driven by [`kbx search-index` / `kbx search-serve`](https://github.com/anokye-labs/kbexplorer-cli) → [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) SPA (`POST /search`) |
 | Identity / relations | [`identity.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/identity.ts) · [`relations.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/relations.ts) | — |
 
 Related repos: the
