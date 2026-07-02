@@ -71,4 +71,11 @@ satisfies it, or start from an epic and find who it is for. The work is tracked 
 built in self-contained local mode over a sample knowledge base and published to
 GitHub Pages from this repo.
 
+The deployed showcase is static (self-contained local mode, no backend), so it
+doesn't run a search service by default. To try semantic search over this
+repo's own content: `kbx search-index` to build `.search/` artifacts, then
+`kbx search-serve` (or `npx @anokye-labs/kbexplorer-search serve`) and point a
+local template dev build's `VITE_SEARCH_SERVICE_URL` at it — see
+[Search in `docs/architecture.md`](docs/architecture.md#search--a-first-class-representation-over-the-graph).
+
 > See [`docs/architecture.md`](docs/architecture.md) for the system overview.
