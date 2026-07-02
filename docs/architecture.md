@@ -743,3 +743,14 @@ and drives the explorer; the
 [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) is
 the reference SPA. For the file-by-file data-flow map, read
 [`SUBSYSTEMS.md`](https://github.com/anokye-labs/kbexplorer-template/blob/main/docs/SUBSYSTEMS.md).
+
+---
+
+## Operational workflows
+
+The architecture above describes _what_ the system is; the
+[`docs/workflows/`](workflows/) directory describes _how_ to operate it day to
+day — creating, hosting, and updating datasets, the human-approval and
+governance processes, search-corpus management, and MCP-based
+human-in-the-loop ingestion. Start with the
+[workflows index](workflows/README.md).
