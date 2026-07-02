@@ -1,0 +1,77 @@
+name: showcase-build
+
+# PR-time build check: proves the showcase (kbexplorer-template SPA, pinned to a
+# release tag, built in local mode against this repo's content/) still builds
+# before merge. Mirrors showcase.yml's `build` job exactly, minus the Pages
+# upload/deploy steps — this workflow never publishes anything.
+#
+# Required status check on main (see the "main-protection" ruleset). Keep
+# TEMPLATE_REF here in sync with showcase.yml whenever the template is bumped.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  TEMPLATE_REPO: anokye-labs/kbexplorer-template
+  TEMPLATE_REF: v0.4.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: showcase-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  showcase-build:
+    name: showcase-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out template (pinned)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.TEMPLATE_REPO }}
+          ref: ${{ env.TEMPLATE_REF }}
+          path: template
+
+      # This (showcase) repo is the content HOST: its `content/` is rendered as the
+      # knowledge base. The template reads it via VITE_KB_HOST_ROOT (set below).
+      # Checks out the PR's head commit (default ref for pull_request events).
+      - name: Check out showcase host content
+        uses: actions/checkout@v7
+        with:
+          path: host
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: template/package-lock.json
+
+      - name: Install dependencies
+        working-directory: template
+        run: npm ci
+
+      # Local mode: bake config + authored content + file tree + README + (best-effort)
+      # issues/PRs into src/generated/repo-manifest.json so the bundle is self-contained.
+      - name: Generate manifest
+        working-directory: template
+        run: node scripts/generate-manifest.js
+        env:
+          VITE_KB_LOCAL: 'true'
+          VITE_KB_HOST_ROOT: ${{ github.workspace }}/host
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build
+        working-directory: template
+        run: npx vite build
+        env:
+          VITE_KB_LOCAL: 'true'
+          VITE_KB_HOST_ROOT: ${{ github.workspace }}/host
+          VITE_BASE_PATH: /kbexplorer/
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Copy index.html to 404.html for SPA routing
+        working-directory: template
+        run: cp dist/index.html dist/404.html
