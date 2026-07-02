@@ -48,13 +48,6 @@ This repo holds **no application code**. The code lives in:
 - a deployed **showcase** of kbexplorer — the `spa` representation rendering a
   sample knowledge base in the browser.
 
-## Workflows
-
-- [`docs/workflows/`](docs/workflows/) — operational workflow documentation for
-  running a kbx knowledge base day to day: creating, hosting, and updating a
-  dataset, human-approval and governance processes, search-corpus management,
-  and MCP-based human-in-the-loop ingestion.
-
 ## The kbx story
 
 Beyond the architecture, this repo tells the **full kbx story** so a reader — or an
