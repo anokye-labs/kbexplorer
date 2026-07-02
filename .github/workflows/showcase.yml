@@ -26,7 +26,7 @@ on:
 # template release ships (the template advises host repos to pin to a tag, not main).
 env:
   TEMPLATE_REPO: anokye-labs/kbexplorer-template
-  TEMPLATE_REF: v0.4.0
+  TEMPLATE_REF: v0.4.1
 
 permissions:
   contents: read
