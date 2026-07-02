@@ -72,8 +72,8 @@ is working the repo:
   file, re-run the check, re-fetch the live resource — not the state at the
   time the PR was opened. Then close it citing the specific evidence (a file
   and line, a check-run URL, a fetched page) that satisfied each criterion.
-- **Conventional Commits.** `type(scope): description`, per the commit
-  conventions at the top of this document.
+- **Conventional Commits.** `type(scope): description` — types: `feat`, `fix`,
+  `docs`, `style`, `refactor`, `test`, `chore`, `ci`.
 - **Workback scheduling / work breakdown.** When a program is large enough to
   need a real Epic → Feature → Task breakdown — native GitHub sub-issues plus
   `blocked-by` dependency edges sequenced into waves — don't hand-roll it.
