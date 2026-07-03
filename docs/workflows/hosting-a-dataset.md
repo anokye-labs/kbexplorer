@@ -129,6 +129,21 @@ For details on how the search corpus is built, see
 - [Governance with rulesets](rulesets-and-automation.md) — how CI and branch
   protection manage the dataset repo.
 
+## Cross-references
+
+- Demand map: [G1 — install & distribute](../user-stories.md#g--operate--30),
+  [G5 — run surfaces with one lifecycle](../user-stories.md#g--operate--30),
+  [D9 — content negotiation](../user-stories.md#d--make-sense-of-it--27),
+  [F1/F2 — llm-context & JSON-LD export](../user-stories.md#f--kb-as-context--export--29).
+- Journey: [J3 — no GitHub host](../journeys.md#j3--kenji-perforce-helix-core-no-github-host)
+  is the strongest test of the host seam.
+- Delivered by: [#16](https://github.com/anokye-labs/kbexplorer/issues/16)
+  (decouple host),
+  [kbexplorer-cli#131](https://github.com/anokye-labs/kbexplorer-cli/issues/131)
+  (lifecycle),
+  [kbexplorer-template#423](https://github.com/anokye-labs/kbexplorer-template/issues/423)
+  (surfaces).
+
 ---
 
 > The showcase is a `spa` representation target rendering the pure `KBGraph`;
