@@ -28,6 +28,10 @@ This repo holds **no application code**. The code lives in:
     three interchangeable delivery adapters (extension-tool, MCP, canvas),
   - the provider and representation **extension points** (bring your own local or
     third-party providers and render targets).
+- [`docs/graph-build/`](docs/graph-build/) — a visual, step-by-step walkthrough of
+  **how the knowledge graph is built**: the baked-vs-live source swap and the
+  Sources → Providers → Engine → Representation pipeline, each stage fronted by an
+  animated diagram. The narrative companion to the architecture doc's engine layer.
 - [`docs/surfaces.md`](docs/surfaces.md) — the **two render surfaces** over the
   same graph: the human-facing SPA showcase (GitHub Pages) and the
   agent-facing embeddable Copilot canvas (served by `kbexplorer-cli` over a

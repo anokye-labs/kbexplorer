@@ -60,6 +60,10 @@ in depth.
 
 - [Architecture](../architecture.md) — the four-layer model (Sources ->
   Providers -> Engine -> Representation).
+- [Graph build](../graph-build/) — the *internal* companion to these
+  operational workflows: how the graph is **built**, from the baked/live source
+  swap through providers, transforms, and `buildGraph` to the render targets —
+  each stage fronted by an animated diagram in this same visual language.
 - [Personas](../personas.md) · [Journeys](../journeys.md) ·
   [User stories](../user-stories.md) — who uses kbx and why.
 - [Adoption paved path](../adoption-paved-path.md) — making kbx integration
