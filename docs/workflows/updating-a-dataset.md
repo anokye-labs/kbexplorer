@@ -1,51 +1,204 @@
-# Updating a kbx dataset
+# Updating a dataset
 
-How a dataset stays current without anyone re-authoring the graph. The crux:
-**updates are incremental and reviewable**. A change — whether an author's
-edit, a contributor's code change, or drift detected in an upstream source —
-is scoped to the subgraph it affects, regenerated narrowly, and lands through
-a pull request like any other change to the repository.
+The refresh loop: re-deriving content, checking for drift, triggering rebuilds,
+and keeping the search corpus current. This is the day-to-day operational
+process for a running kbx knowledge base. The crux: **updates are incremental
+and reviewable** — every change is scoped to the subgraph it affects,
+regenerated deterministically, and lands through a pull request.
 
 ![Updating a kbx dataset — every change is diffable, reviewable, and traceable](updating-a-dataset.svg)
 
-## The flow
+For initial setup, see [creating a dataset](creating-a-dataset.md). For the
+search-specific deep dive, see [search corpus updates](updating-the-search-corpus.md).
 
-1. **A change happens** — an author edits content, a contributor's PR touches
-   code the KB describes, or the drift loop notices an upstream source no
-   longer matches what was ingested.
-2. **Scope what changed** — "affected" is computed from the change itself
-   (diff-scoped for git; a changelist/shelf/label range for non-git stores):
-   which nodes and edges does this touch?
-3. **Regenerate narrowly** — only the affected subgraph is refreshed. Cheap
-   refresh is the design goal; a full rebuild is the fallback, not the norm.
-4. **Stage a branch + PR** — the regenerated delta is committed to a branch
-   and opened as a pull request. Never a direct commit to `main`; the delta
-   *is* the proposal.
-5. **Review the delta** — the reviewer sees a rendered diff plus freshness
-   and staleness signals, not a wall of regenerated files.
-6. **Merge on green** — CI gates drift (see
-   [rulesets & automation](rulesets-and-automation.md)); on merge, surfaces
-   and the [search corpus](updating-the-search-corpus.md) refresh.
+## The refresh loop
 
-## Gates & guarantees
+```mermaid
+flowchart LR
+  Change["Source change<br/>(code, docs, SoR)"]
+  Derive["kbx derive<br/>re-extract entities"]
+  Check["kbx derive --check<br/>drift gate"]
+  Audit["kbx audit<br/>structural lint"]
+  SearchIdx["kbx search-index<br/>rebuild search corpus"]
+  Build["kbx build<br/>production build"]
+  Change --> Derive --> Check
+  Change --> Audit
+  Check --> SearchIdx --> Build
+  Check --> Build
+```
 
-- **The KB never silently rots.** Staleness is a first-class, visible signal
-  (per-node freshness), not an archaeology exercise.
-- **Incidental contribution works.** A code change can spawn or update a node
-  without the contributor ever "authoring the graph."
-- **Derivation is honest.** When an upstream fact changes, dependents derived
-  from it (`wasDerivedFrom`) are flagged stale rather than silently kept or
-  silently deleted.
+## 1. Identify what changed
 
-## Traceability
+After a code or documentation change:
 
-- Stories: [B2 — incidental node from a code change](../user-stories.md#b--grow--curate--25),
-  [C1 — incremental refresh](../user-stories.md#c--keep-healthy--current--26),
-  [C2 — freshness & staleness signals](../user-stories.md#c--keep-healthy--current--26),
-  [H1 — drift loop](../user-stories.md#h--sync--trust--31),
-  [K4 — honest derivation](../user-stories.md#k--time--provenance-semantic-space-time--32).
-- Delivered by: [kbexplorer-cli#136](https://github.com/anokye-labs/kbexplorer-cli/issues/136)
-  (affected dispatch), [kbexplorer-cli#158](https://github.com/anokye-labs/kbexplorer-cli/issues/158)
-  (refresh), [kbexplorer-cli#157](https://github.com/anokye-labs/kbexplorer-cli/issues/157)
-  (freshness), [kbexplorer-core#24](https://github.com/anokye-labs/kbexplorer-core/issues/24)
-  (derivation).
+```bash
+kbx affected HEAD~1         # which content nodes cite changed files?
+kbx affected HEAD~1 --json  # machine-readable for tooling
+```
+
+`affected` maps a git diff to impacted content nodes via their citations,
+telling you exactly which pages need refreshing.
+
+## 2. Re-derive entities
+
+If `.docx`, prose `.md`, or `.txt` sources under a derived path changed,
+refresh their artifacts:
+
+```bash
+kbx derive path/to/source.md --refresh   # force re-extraction even if fresh
+kbx derive docs/*.docx                    # re-derive; unchanged sources skip the LLM
+```
+
+**Idempotency**: artifacts are timestamp-free and serialized with sorted keys.
+Identical input produces byte-identical output. The artifact embeds the
+extraction intermediate keyed by the source's SHA-256; re-running on unchanged
+sources reuses that intermediate and re-emits deterministically **without
+calling the LLM**.
+
+## 3. Run the drift gate
+
+```bash
+kbx derive docs/*.docx --check   # CI drift gate, no API calls
+```
+
+`--check` is a read-only gate: it reports drift (and exits non-zero) when an
+artifact is missing, its source has changed, or a fresh deterministic emit
+differs from the committed bytes. It never invokes Copilot. Suitable for CI.
+
+## 4. Validate structurally
+
+```bash
+kbx audit    # hard structural lint (CI-grade, exits non-zero on errors)
+kbx links    # soft graph-health report (advisory)
+```
+
+`audit` checks: duplicate ids, broken parents, parent cycles, dead
+connections, missing required frontmatter, undeclared clusters. `links`
+reports: orphans, weak clusters, coverage gaps.
+
+## 5. Update the search corpus
+
+```bash
+kbx search-index             # extract + embed + write to .search/
+kbx search-index --check     # CI drift gate (no API calls)
+```
+
+The search index is rebuilt from the same knowledge graph. The drift gate
+compares committed artifacts (`units.json`, `vectors.json`, `index-meta.json`)
+against a fresh extraction — purely deterministic, no embedding API calls.
+
+See [search corpus updates](updating-the-search-corpus.md) for the full deep dive
+on how `SearchUnit`s are derived, access labels are enforced, and the lexical
+(BM25) provider works without credentials.
+
+### Future: PARA classification and document-to-note derivation
+
+The reindex loop is where two planned features will run alongside the
+graph/search refresh:
+
+- **PARA classification pass**
+  ([kbexplorer#112](https://github.com/anokye-labs/kbexplorer/issues/112)) —
+  kbx auto-classifies graph entities as Projects, Areas, Resources, or Archive
+  and proposes + executes archiving decisions. Not yet built.
+- **Document-to-note derivation pass**
+  ([kbexplorer#114](https://github.com/anokye-labs/kbexplorer/issues/114)) —
+  derives zettelkasten-style notes from long-form documents, maintaining the
+  note-to-source link. Notes are re-checked every reindex, with a
+  human-edit-vs-regenerate policy preserving manual refinements. Not yet built.
+
+Both are epics, not shipped features. They are scoped to run during the
+reindex loop because that is where the full graph and search corpus are
+available for classification and derivation.
+
+## 6. Rebuild and deploy
+
+```bash
+kbx build    # production build -> dist/kb/
+```
+
+See [hosting a dataset](hosting-a-dataset.md) for deployment options.
+
+## Incremental vs. full refresh
+
+| Trigger | What to re-run | Why |
+|---------|----------------|-----|
+| Content source changed | `kbx derive <source> --refresh` for that source, then `audit` + `search-index` | Only the changed source needs re-extraction |
+| Code change in the repo | `kbx affected <ref>` to find impacted nodes, refresh those | Surgical update based on citation graph |
+| New template version | `kbx update`, then `kbx build` | Template change does not affect content |
+| Full periodic refresh | `kbx derive`, `kbx search-index`, `kbx build` | Catch any accumulated drift |
+
+## CI-driven refresh
+
+### Scheduled (cron)
+
+A GitHub Actions workflow on a cron schedule (ties to
+[user-stories.md G4 / #159](../user-stories.md) — scheduled-and-webhook-refresh)
+can run the deterministic gates and rebuild:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 4 * * *'   # daily at 4am UTC
+jobs:
+  refresh:
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: kbx derive content/derived-sources/*.md --check
+      - run: kbx audit
+      - run: kbx search-index --check
+      - run: kbx build
+```
+
+### Webhook-triggered
+
+A `repository_dispatch` or `workflow_dispatch` event can trigger the same
+refresh on demand — useful when an upstream system of record (an issue tracker,
+a CMS) pushes a change notification.
+
+## The recommended loop (manual)
+
+This is the loop the kb-writer agent runs on your behalf when you ask it to
+"refresh the KB after this change" — running it by hand is the escape hatch,
+not the paved path. From the
+[`kbexplorer-cli` AGENTS.md](https://github.com/anokye-labs/kbexplorer-cli/blob/main/AGENTS.md):
+
+```bash
+# 1. Find which content nodes cite the changed files
+kbx affected HEAD~1
+
+# 2. Refresh those pages (follow writer-playbook.md or update-node.md)
+
+# 3. If a derived source changed, refresh its artifact
+kbx derive path/to/source.md --refresh
+
+# 4. Validate
+kbx audit
+kbx links
+kbx derive content/derived-sources/*.md --check
+
+# 5. Confirm it renders
+kbx dev
+```
+
+## Cross-references
+
+- The drift-gate pattern (committed artifacts + SHA-256 keying + `--check`)
+  is the same pattern used for cross-source connection artifacts
+  ([history.md](../history.md)).
+- The forward-requirements vision
+  ([kbexplorer#12](https://github.com/anokye-labs/kbexplorer/issues/12)) —
+  identity, addressing, composition, representation, semantic space-time — is
+  the "index, don't migrate" principle these workflows embody.
+- For how changes get human sign-off, see
+  [human approval workflow](approving-a-change.md).
+
+---
+
+> The architecture is four layers: Sources -> Providers -> Engine ->
+> Representation ([architecture.md](../architecture.md)). The refresh loop
+> re-runs the left side (sources, providers) and deterministically regenerates
+> the right side (engine output, representation artifacts). The graph is always
+> re-derived, never mutated in place.
