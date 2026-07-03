@@ -81,6 +81,13 @@ one [`RepoData`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/so
 bundle the engine expects. That bundle is the hand-off point to the next stage —
 the providers turn it into graph nodes.
 
+`RepoData` carries a mix of shapes: authored **Markdown**, the structured
+**content model** (typed YAML + JSON-LD context), **structural** files
+(`.github/**`, `CODEOWNERS`), and a **thin file tree** (paths, not contents).
+Which file types actually become nodes — and how a `.docx` or `.txt` gets in via
+`kbx derive` or a bring-your-own provider — is covered in
+[providers → graph → *What about non-markdown files?*](providers-to-graph.md#what-about-non-markdown-files).
+
 ## Next
 
 - [Providers → graph](providers-to-graph.md) — how `RepoData` becomes a pure
