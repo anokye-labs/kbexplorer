@@ -258,6 +258,11 @@ The engine is the single assembly path that resolves providers and emits a
 **pure `KBGraph`** — data only, no styling, no rendering, no I/O. This is the
 stable artifact everything downstream consumes.
 
+> For a visual, step-by-step walkthrough of this pipeline — the baked-vs-live
+> source swap, `registerProviders`, the orchestrator's transforms, and
+> `buildGraph` — see [`docs/graph-build/`](graph-build/), where each stage is
+> fronted by an animated diagram.
+
 `loadKnowledgeBase(source, config)`
 ([`loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/loader.ts))
 is the one entry point:
