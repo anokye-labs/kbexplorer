@@ -313,7 +313,8 @@ Loaders carry **no** post-processing; they only build the `TransformContext`
 [`buildGraph(nodes, clusters)`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/graph.ts):
 
 1. **edges** — each `node.connections[]` becomes a deduped `KBEdge`
-   (keyed by the unordered node pair) plus `parent → child` `contains` edges;
+   (deduplicated by a directed key of `from`, `to`, `type`, and `relation`, so
+   `A → B` is distinct from `B → A`) plus `parent → child` `contains` edges;
    weight is `conn.weight ?? getEdgeWeight(type)`.
 2. **orphan reattachment** — any edge-less node is linked to a connected
    same-cluster sibling (else the highest-degree hub) via an inferred `related`
