@@ -17,12 +17,21 @@ re-describing types — the contract is the source of truth.
 
 ## Branch Protection
 
-**Check, don't assume.** A live audit (#105) found this repo has **no branch
-protection ruleset on `main` at all**, despite this section previously
-claiming required status checks and conversation resolution were enforced —
-that claim was false. Do not rely on any protection invariant (required
-checks, conversation resolution, force-push/deletion blocks) without
-verifying it directly against the live repo first — e.g.
+**Check, don't assume.** As of this writing, `main` is protected by an
+active ruleset (id `18436834`, applied per #105) enforcing:
+
+- **0 required approving reviews**, but **all review conversations must be
+  resolved** before merge.
+- **Required status checks**, with the branch required to be up to date
+  before merging: `pr-title`, `check-linked-issue`, `dependency-review`, and
+  `showcase-build` (added per #117).
+- **No force pushes** and **no branch deletion**.
+
+Don't trust this paragraph either — it has already been wrong once (an
+earlier version of this section claimed protections that, at the time,
+didn't exist), and it will go stale again the moment the ruleset changes and
+nobody updates the prose. Always verify directly against the live repo
+before relying on any protection invariant — e.g.
 `gh api repos/anokye-labs/kbexplorer/rules/branches/main` (or the equivalent
 REST/GraphQL/MCP call) — rather than trusting what this document says the
 ruleset is.
@@ -35,7 +44,8 @@ non-negotiable for every contributor, human or agent:
 
 If you find the live ruleset doesn't match what's documented (or is missing
 entirely), don't quietly work around the gap: it's a finding, not a
-convenience. File or update an issue (see #105 for the tracked example).
+convenience. File or update an issue (see #105 and #117 for tracked
+examples).
 
 ## Issue-First Workflow
 
