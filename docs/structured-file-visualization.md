@@ -50,6 +50,7 @@ pull requests, Wikipedia pages).
 | **Render contribution** | The render half a provider may ship: a `./views` entry point carrying viewers + block renderers, declared via `ProviderModule.views` | **new**, `ProviderModule` (core, additive) |
 | **View-kit** | The published render contract the views entry types against (`ViewerProps`, `BlockOutput`, `VIEW_API_VERSION`); React peer dep | **new**, `@anokye-labs/kbexplorer-view-kit`, a workspace subpackage of the template repo |
 | **Canonical view-model** | Pure data contract for a host-owned model lens (e.g. `CalendarModel`) — the stack-free render contribution | **new**, core (additive) |
+| **Site lens** | A site-owner-authored MDX/TSX view template in the host repo (`views/`), compiled by the template build, highest override precedence | **new**, host repo (machinery in template) |
 
 ## 3. Current state (verified in-repo, 2026-07-04)
 
@@ -255,6 +256,50 @@ The template registry accepts both; lazy entries resolve on first render behind
 `React.lazy`/`Suspense`. Heavy engines (WASM Graphviz) must use the lazy form
 so the SPA's initial bundle is unaffected.
 
+### Site-local lenses — MDX/TSX view templates in the host repo
+
+The third contribution tier, for site owners rather than package authors:
+bespoke per-repo (or per-folder) renderings authored as files in the **host
+repo** — `views/**/*.{mdx,tsx}` next to `content/` — with no package to
+publish. Placement is the load-bearing decision: authored templates must live
+in the host repo, **never inside the `.kbx/` template checkout**, because that
+checkout is a pinned submodule/vendor copy that `kbx update` replaces — edits
+there are lost. The *machinery* lives in the template repo: a Vite plugin
+discovers host `views/` files through the same `VITE_KB_HOST_ROOT` seam the
+manifest generator uses, compiles MDX via `@mdx-js/rollup` (TSX comes free via
+esbuild), and registers the resulting components — a no-op for sites without a
+`views/` directory. In self-hosted mode (the template repo *is* the site, as
+in the demo) host root = template root and `views/` at the repo root works
+identically. Docs call these **site lenses** to avoid overloading "template".
+
+An MDX site lens is markdown with component slots, receiving the node and its
+view-model as props, with the host's canonical model lenses in scope:
+
+````mdx
+---
+lens: team-calendar
+appliesTo: { entityType: calendar, path: "team/**" }
+---
+# {props.node.title}
+
+<CalendarMonth model={props.model} accent="brand" />
+
+Our ceremonies — updated weekly, times in PT.
+````
+
+Registration order makes precedence most-specific-wins via the existing
+last-registration-wins registries: **builtins → provider `./views` entries
+(config order) → site lenses**. Scoping stays data: `appliesTo` resolves
+through the same lens-assignment pass as `structured-node-map.yaml` rules,
+stamping `lenses`/`defaultLens` onto matching nodes at build time — the
+registry never learns about globs. Both surfaces get site lenses for free
+(same Vite build), and the gallery/screenshot harness (§13) picks them up so
+hand-authored lenses meet the same beauty bar. Trust-wise this is the mildest
+tier — the host repo's own code on the host's own site, the same grant as the
+existing repo-local provider modules and theme modules. This also serves as
+the prototype for `docs/decisions/markdown-rendering-default.md` option (b):
+rendering as a property of the site/folder rather than the document.
+
 **Trust (NFR-1):** the specifier policy is unchanged (`classifySpecifier`:
 relative-local and bare npm names only; absolute paths and URL schemes
 rejected). Executing a provider's render half is executing third-party React in
@@ -459,6 +504,7 @@ Three tracks; Track B features are mutually parallel by design.
 | A3 | [template#493](https://github.com/anokye-labs/kbexplorer-template/issues/493) | Lens switcher + viewer props v2 (graph access, `?lens=` routing, Source lens) |
 | A4 | [template#494](https://github.com/anokye-labs/kbexplorer-template/issues/494) | Bug: canvas entry never registers builtin viewers |
 | A5 | [template#503](https://github.com/anokye-labs/kbexplorer-template/issues/503) | Publish `@anokye-labs/kbexplorer-view-kit` — the render-contract package (React peer dep) |
+| A6 | [template#504](https://github.com/anokye-labs/kbexplorer-template/issues/504) | Site-local lenses — MDX/TSX view templates in the host repo (`views/`) |
 
 **Track B — lenses & showcase (parallel):**
 | # | Issue | Feature |
