@@ -47,7 +47,9 @@ pull requests, Wikipedia pages).
 | **Viewer** | A React component keyed into the viewer registry by `entityType` / JSON-LD `@type` / explicit key | template `src/views/viewers/registry.ts` |
 | **Lens** | A *named per-node view*: `{ id, label, viewer }`. One node may carry several; exactly one is default | **new**, `KBNode.lenses` (core, additive) |
 | **Block renderer** | Maps a fenced-block `kind` to a render decision (`mermaid` / `svg` / `unsupported`, extended below) | template `src/views/rich-markdown/registry.ts` |
-| **Render contribution** | The render half a provider module may ship: viewers + block renderers | **new**, `ProviderModule` (core, additive) |
+| **Render contribution** | The render half a provider may ship: a `./views` entry point carrying viewers + block renderers, declared via `ProviderModule.views` | **new**, `ProviderModule` (core, additive) |
+| **View-kit** | The published render contract the views entry types against (`ViewerProps`, `BlockOutput`, `VIEW_API_VERSION`); React peer dep | **new**, `@anokye-labs/kbexplorer-view-kit`, a workspace subpackage of the template repo |
+| **Canonical view-model** | Pure data contract for a host-owned model lens (e.g. `CalendarModel`) — the stack-free render contribution | **new**, core (additive) |
 
 ## 3. Current state (verified in-repo, 2026-07-04)
 
@@ -130,24 +132,44 @@ export interface ProviderModule {
   default: ProviderFactory;
   apiVersion?: string;
   capabilities?: ProviderCapability[];   // unchanged: capabilities the module REQUIRES
-  /** Render contribution: viewer-registry entries, keyed by entityType/@type/lens key.
-   *  Values are host-defined (opaque to core): a component, or a lazy loader. */
-  viewers?: Record<string, unknown>;
-  /** Render contribution: block renderers keyed by fenced-block kind. */
-  blockRenderers?: Record<string, unknown>;
+  /** Render contribution: package-relative specifier of the module carrying
+   *  viewers + block renderers (e.g. './views'). A SPECIFIER, not values —
+   *  importing the '.' entry must never evaluate the render module graph. */
+  views?: string;
 }
 ```
 
+**Why a specifier and not exported values.** The CLI's composite ingest runs in
+Node with no DOM and no React; the engine is render-free by boundary test. If
+viewer components were values on the data module, every data-only host would
+evaluate React the moment it imports the provider — the capability check can
+gate *binding*, but not *evaluation* of an already-imported module graph. With
+a declared entry point, only hosts that advertise the capability (and whose
+config opts in) ever dynamic-import the render half; the `.` entry stays
+core-only and loadable everywhere.
+
 **Degradation semantics (FR-2), with no change to `checkProviderCompatibility`:**
 `capabilities` keeps its existing meaning — capabilities the module *requires*.
-A provider that can run data-only must **not** list `'viewers'` there; instead
-the presence of the `viewers` / `blockRenderers` exports *is* the optional
-declaration. A host that advertises `'viewers'` in its `ProviderHostContract`
-binds them; a host that doesn't logs one warning and loads the data half —
+A provider that can run data-only must **not** list `'viewers'` there; the
+presence of the `views` declaration *is* the optional offer. A host that
+advertises `'viewers'` in its `ProviderHostContract` imports and binds the
+views entry; a host that doesn't logs one warning and loads the data half —
 nodes still render via `GenericStructuredView`. A provider that is *useless*
 without its render half (mode-1 lens-only packages) lists `'viewers'` in
 `capabilities` and is skipped outright on incapable hosts — both behaviors fall
 out of the existing check.
+
+**Canonical view-models — the stack-free tier (preferred where it fits).**
+Most of what a "calendar provider" contributes to rendering isn't a component,
+it's a *parse to a known shape*. Core gains small pure data contracts for
+host-owned model lenses — first `CalendarModel` (events with start/end/all-day/
+summary/location/category); later `GraphModel`, `BoardModel`, `TableModel` as
+the lens catalog proves them. A provider parses at `resolve()` time, stores the
+model on `node.data`, and declares `viewer: 'calendar-month'` — **zero render
+code shipped**, works on every surface, testable under `node:test`. The
+pre-built-SVG fallback remains the universal escape hatch below that
+(mime-bundle-style degradation). Bespoke components are the escalation path,
+not the default.
 
 ```ts
 // graph.ts — per-node lens model (additive optional fields on KBNode)
@@ -174,14 +196,20 @@ concern"): (a) `structured-node-map.yaml` rules gain a `lenses:` field; (b)
 frontmatter on authored/rich-markdown docs; (c) provider code. All three
 converge on the same `KBNode.lenses` data.
 
-**The viewer-component type gap.** No package in the chain can host a React
-component type: core is framework-agnostic, the engine is deliberately
-render-free (no React dependency; #463's boundary test forbids it). Resolution:
-core carries the contribution maps as `unknown`; the **template documents and
-exports its `ViewerComponent` / `ViewerProps` types as public surface**
-(`docs/providers.md`), and provider packages treat React as a peer dependency.
-No-build-step providers (NFR-4) write `React.createElement` or ship a
-precompiled `dist/` — both documented with a runnable example.
+**The render contract's home: `@anokye-labs/kbexplorer-view-kit`.** A viewer is
+inherently UX-stack-specific (React + Fluent), so its contract cannot live in
+core (dependency-free) or the engine (render-free). It lives where the stack
+lives: a **published workspace subpackage of the template repo** exporting
+`ViewerProps`, `ViewerComponent`, `LazyViewer`, `BlockRenderer`, `BlockOutput`,
+the `ProviderViews` module shape, and a `VIEW_API_VERSION` (versioned
+independently, same-major-compatible) — with **React as a peer dependency**.
+The template consumes its own package so the types are single-sourced and
+version in lockstep with the surfaces that satisfy them. The dependency
+picture then has no layer-skips: data half → core; canonical parsers → core
+view-model types; bespoke lenses → view-kit; template → composes all of it.
+No-build-step providers (NFR-4) write `React.createElement` (view-kit as a
+types-only devDependency) or precompile just their views entry — the `.` data
+entry stays pure ESM either way.
 
 ## 6. Loading & registration flow (engine + template)
 
@@ -196,8 +224,11 @@ loadExternalProviders(configs, hooks?: {
 ```
 
 After the existing compat check, when the host contract advertises the
-matching capability, the loader walks `mod.viewers` / `mod.blockRenderers` and
-calls the hooks with **opaque values** — the engine never imports React.
+matching capability *and* the entry opts in, the loader resolves `mod.views`
+relative to the provider's specifier (same `classifySpecifier` policy),
+dynamic-imports it, and hands the loaded `ProviderViews` object to the hooks
+as **opaque values** — the engine never imports React, and on incapable or
+non-opted-in hosts the views module is never evaluated at all.
 Registration order = `config.yaml` declared order (already the loader's
 iteration order), and both registries are last-registration-wins, so downstream
 packages can override built-ins deterministically (FR-3). This mirrors the
@@ -390,9 +421,12 @@ pixelmatch nightly gate, property-based `audit:visual`):
 ## 14. Versioning, compatibility, testing
 
 - Core: one minor release (`PROVIDER_API_VERSION` 1.1.0 + `NodeLens` +
-  `ProviderModule` fields); data-only providers load unmodified; contract
-  tests extend `test/provider-compat.test.ts` with the two capability names
-  and the degrade-don't-reject behavior.
+  `ProviderModule.views` + first canonical view-models); data-only providers
+  load unmodified; contract tests extend `test/provider-compat.test.ts` with
+  the two capability names and the degrade-don't-reject behavior.
+- View-kit: released from the template repo with its own `VIEW_API_VERSION`
+  (same-major-compatible); a provider's views entry declares the version it
+  targets, checked at bind time with the same skip-and-warn semantics.
 - Engine/template: loader tests for registration order, capability-gated skip,
   `render: true` gating, and both-entries viewer registration; the boundary
   test keeps React out of the engine (hooks receive opaque values).
@@ -420,10 +454,11 @@ Three tracks; Track B features are mutually parallel by design.
 **Track A — platform (sequenced):**
 | # | Issue | Feature |
 | --- | --- | --- |
-| A1 | [core#76](https://github.com/anokye-labs/kbexplorer-core/issues/76) | Render-contribution contract + `NodeLens` (API 1.1.0) |
-| A2 | [template#492](https://github.com/anokye-labs/kbexplorer-template/issues/492) | Wire render contributions through plugin loading into both registries; `render: true` gate; shared entry composition |
+| A1 | [core#76](https://github.com/anokye-labs/kbexplorer-core/issues/76) | Render-contribution contract (`views` entry declaration) + `NodeLens` + canonical view-models (API 1.1.0) |
+| A2 | [template#492](https://github.com/anokye-labs/kbexplorer-template/issues/492) | Load provider `./views` entries into both registries; `render: true` gate; shared entry composition |
 | A3 | [template#493](https://github.com/anokye-labs/kbexplorer-template/issues/493) | Lens switcher + viewer props v2 (graph access, `?lens=` routing, Source lens) |
 | A4 | [template#494](https://github.com/anokye-labs/kbexplorer-template/issues/494) | Bug: canvas entry never registers builtin viewers |
+| A5 | [template#503](https://github.com/anokye-labs/kbexplorer-template/issues/503) | Publish `@anokye-labs/kbexplorer-view-kit` — the render-contract package (React peer dep) |
 
 **Track B — lenses & showcase (parallel):**
 | # | Issue | Feature |
