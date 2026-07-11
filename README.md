@@ -8,18 +8,44 @@ This repo holds **no application code**. The code lives in:
   contracts (types, `kg://` identity, relation taxonomy, JSON-LD helpers, and the
   Source / Provider / Representation interfaces).
 - [`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli) — the CLI that
-  derives content and drives the explorer.
+  derives content, drives the explorer, and serves the embeddable Copilot canvas.
 - [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) — the
-  SPA that renders a knowledge graph in the browser.
+  SPA that renders a knowledge graph in the browser (and, additively, the
+  embeddable canvas entry).
+- [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) — the
+  semantic-search companion module, driven through the CLI.
+- [`kbexplorer-provider-rich-markdown`](https://github.com/anokye-labs/kbexplorer-provider-rich-markdown) —
+  the loadable provider that ingests a rich-Markdown document into a graph
+  fragment.
 
 ## What's here
 
-- `docs/` — the architecture documentation:
+- [`docs/architecture.md`](docs/architecture.md) — the architecture documentation:
   - the four layers — **Sources → Providers → Engine → Representation**,
   - the source / affordance model (affordances are advertised **per retrieval**,
     not per resource type, and resources carry hypermedia `links`),
+  - the **do-seam** — the protocol-neutral affordance action layer and its
+    three interchangeable delivery adapters (extension-tool, MCP, canvas),
   - the provider and representation **extension points** (bring your own local or
     third-party providers and render targets).
+- [`docs/graph-build/`](docs/graph-build/) — a visual, step-by-step walkthrough of
+  **how the knowledge graph is built**: the baked-vs-live source swap and the
+  Sources → Providers → Engine → Representation pipeline, each stage fronted by an
+  animated diagram. The narrative companion to the architecture doc's engine layer.
+- [`docs/surfaces.md`](docs/surfaces.md) — the **two render surfaces** over the
+  same graph: the human-facing SPA showcase (GitHub Pages) and the
+  agent-facing embeddable Copilot canvas (served by `kbexplorer-cli` over a
+  loopback server). They are different Representation targets, not two
+  versions of one product.
+- [`docs/history.md`](docs/history.md) — a verified, dated changelog across all
+  five repos, plus an honest "what's actually shipped vs. designed" status.
+- [`docs/decisions/`](docs/decisions/) — design decisions worth preserving:
+  [connect-not-merge for cross-source data](docs/decisions/conflation-correction.md)
+  (decided, shipped) and an
+  [open question on rich-Markdown-by-default](docs/decisions/markdown-rendering-default.md)
+  (explicitly **not** decided).
+- [`docs/canvas-dev-loop.md`](docs/canvas-dev-loop.md) — a verified, run-it-yourself
+  guide for iterating on the embeddable canvas locally.
 - [`docs/adoption-paved-path.md`](docs/adoption-paved-path.md) — a holistic
   adoption roadmap for making kbx integration into another repository a guided,
   diagnosable path.
@@ -48,5 +74,12 @@ satisfies it, or start from an epic and find who it is for. The work is tracked 
 [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) SPA,
 built in self-contained local mode over a sample knowledge base and published to
 GitHub Pages from this repo.
+
+The deployed showcase is static (self-contained local mode, no backend), so it
+doesn't run a search service by default. To try semantic search over this
+repo's own content: `kbx search-index` to build `.search/` artifacts, then
+`kbx search-serve` (or `npx @anokye-labs/kbexplorer-search serve`) and point a
+local template dev build's `VITE_SEARCH_SERVICE_URL` at it — see
+[Search in `docs/architecture.md`](docs/architecture.md#search--a-first-class-representation-over-the-graph).
 
 > See [`docs/architecture.md`](docs/architecture.md) for the system overview.

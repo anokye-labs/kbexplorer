@@ -42,7 +42,9 @@ flowchart LR
 - [Layer 2 — Providers](#layer-2--providers)
 - [Layer 3 — Engine](#layer-3--engine)
 - [Layer 4 — Representation](#layer-4--representation)
+- [Search — a first-class representation over the graph](#search--a-first-class-representation-over-the-graph)
 - [Cross-cutting — identity & relations](#cross-cutting--identity--relations)
+- [The do-seam — affordances as a protocol-neutral action layer](#the-do-seam--affordances-as-a-protocol-neutral-action-layer)
 - [Extension points](#extension-points)
 - [Where things live](#where-things-live)
 
@@ -50,6 +52,12 @@ flowchart LR
 > [journeys](journeys.md) · [user-story demand map](user-stories.md) ·
 > [roadmap & program](roadmap.md). This document covers *how kbx is built*; those cover
 > *who it is for and what gets built next*.
+>
+> **See also — the surfaces, history, and open questions:**
+> [the two surfaces](surfaces.md) covers the SPA showcase vs the embeddable
+> Copilot canvas in depth; [history](history.md) is a verified, chronological
+> account of how kbx got here; [decisions](decisions/) records design choices
+> (made and still-open) worth preserving.
 
 ## The one-way dependency rule
 
@@ -120,17 +128,12 @@ fully writable worktrees through the *same* interface.
 #### Resources are self-describing and navigable
 
 A [`Resource`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/source.ts)
-carries everything a consumer needs without a second round-trip:
-
-```ts
-interface Resource<T = unknown> {
-  href: string;            // stable locator for re-retrieval
-  kind: string;            // open: 'file' | 'tree' | 'commit' | 'issue' | …
-  affordances: Affordance[]; // what's allowed on THIS retrieval (situational)
-  links: ResourceLink[];   // hypermedia: { rel, href, type?, title? }
-  body: T;                 // payload; shape depends on kind
-}
-```
+carries everything a consumer needs without a second round-trip: a stable
+`href` locator for re-retrieval, an open `kind` string, the `affordances`
+allowed on *this* retrieval (situational, see below), hypermedia `links`, and
+a `body` payload whose shape depends on `kind`. See the
+[`Resource` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/source.ts)
+for the exact field types.
 
 #### Affordances are advertised **per retrieval**, never per type or per instance
 
@@ -213,17 +216,12 @@ Contract tests live in
 A **`GraphProvider`**
 ([`provider.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts))
 turns resources (and the graph fragments earlier providers produced) into a pure
-graph fragment of nodes + edges:
-
-```ts
-interface GraphProvider {
-  id: string;
-  name: string;
-  dependencies?: string[];        // resolution ordering
-  requiredAffordances?: Affordance[]; // engine fails fast if unmet on retrieval
-  resolve(context: ProviderContext): Promise<{ nodes: KBNode[]; edges: KBEdge[] }>;
-}
-```
+graph fragment of nodes + edges. Every provider carries an `id`/`name`, an
+optional `dependencies` list that fixes its resolution order, an optional
+`requiredAffordances` the engine checks before running it, and a `resolve()`
+method returning `{ nodes, edges }`. See the
+[`GraphProvider` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts)
+for the exact shape.
 
 A provider may declare:
 
@@ -259,6 +257,11 @@ engine change. See [Extension points](#extension-points).
 The engine is the single assembly path that resolves providers and emits a
 **pure `KBGraph`** — data only, no styling, no rendering, no I/O. This is the
 stable artifact everything downstream consumes.
+
+> For a visual, step-by-step walkthrough of this pipeline — the baked-vs-live
+> source swap, `registerProviders`, the orchestrator's transforms, and
+> `buildGraph` — see [`docs/graph-build/`](graph-build/), where each stage is
+> fronted by an animated diagram.
 
 `loadKnowledgeBase(source, config)`
 ([`loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/loader.ts))
@@ -310,7 +313,8 @@ Loaders carry **no** post-processing; they only build the `TransformContext`
 [`buildGraph(nodes, clusters)`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/graph.ts):
 
 1. **edges** — each `node.connections[]` becomes a deduped `KBEdge`
-   (keyed by the unordered node pair) plus `parent → child` `contains` edges;
+   (deduplicated by a directed key of `from`, `to`, `type`, and `relation`, so
+   `A → B` is distinct from `B → A`) plus `parent → child` `contains` edges;
    weight is `conn.weight ?? getEdgeWeight(type)`.
 2. **orphan reattachment** — any edge-less node is linked to a connected
    same-cluster sibling (else the highest-degree hub) via an inferred `related`
@@ -337,24 +341,30 @@ runs; it is transparent to the contract and produces the same `KBGraph`.
 
 A **`Representation`**
 ([`representation.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts))
-renders the **pure** `KBGraph` (plus options) for a target:
-
-```ts
-interface Representation<Out = string> {
-  target: RepresentationTarget;   // 'spa' | 'json-ld' | 'llm-context' | (open)
-  render(graph: KBGraph, options?: RepresentationOptions): Out | Promise<Out>;
-}
-```
+renders the **pure** `KBGraph` (plus options) for a target: it names an open
+`target` string (`'spa'` | `'json-ld'` | `'llm-context'` | …) and implements
+`render(graph, options?)`. See the
+[`Representation` interface](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts)
+for the exact shape.
 
 A [`RepresentationRegistry`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/registry.ts)
 maps a target name to its implementation (parallel to the provider registry).
-`createDefaultRegistry()` pre-populates the three interchangeable built-ins:
+`createDefaultRegistry()`
+([`targets/index.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/index.ts))
+pre-populates four interchangeable built-ins:
 
 | Target | File | Output |
 |---|---|---|
 | `spa` | [`targets/spa.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/spa.tsx) | the interactive explorer website (React route tree) — see the **[live showcase](https://anokye-labs.github.io/kbexplorer/)** |
 | `json-ld` | [`targets/json-ld.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/json-ld.ts) | deterministic, canonicalized JSON-LD `@graph` |
 | `llm-context` | [`targets/llm-context.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/llm-context.ts) | **neighbour-anchored**, token-budgeted Markdown pack |
+| `copilot` | [`targets/copilot.tsx`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/copilot.tsx) | the embeddable, agent-driven Copilot canvas surface — see [surfaces](surfaces.md) |
+
+`copilot` is the newest target (registered by
+[template#442](https://github.com/anokye-labs/kbexplorer-template/pull/442),
+shipped in template `v0.4.0`). It proves the thesis of this whole layer: a
+**fourth** way to render the identical pure `KBGraph`, added with zero change to
+core, the engine, or the other three targets.
 
 ### `json-ld` — deterministic linked data
 
@@ -400,6 +410,80 @@ deliberately kept *out* of the pure data types in core.
 
 ---
 
+## Search — a first-class representation over the graph
+
+The four layers above are about *rendering* the graph. A sibling module —
+[`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search), its
+own repo and package, not a `RepresentationTarget` registered inside
+`kbexplorer-template` — consumes the same graph for a different purpose:
+**semantic search**. The layering contract stays exactly as everywhere else in
+this document:
+
+> **kbexplorer defines and renders the knowledge graph; `kbexplorer-search`
+> derives, validates, and serves semantic search over it.**
+
+It is driven end-to-end through the
+[`kbx` CLI](https://github.com/anokye-labs/kbexplorer-cli), never invoked
+directly by a content author:
+
+```mermaid
+flowchart LR
+  Content[("content/<br/>knowledge graph")]
+  Index["kbx search-index<br/>extract + embed"]
+  Artifacts[(".search/<br/>index-meta.json · units.json · vectors.json")]
+  Serve["kbx search-serve /<br/>npx kbexplorer-search serve"]
+  SPA["kbexplorer-template SPA<br/>POST /search"]
+  Content --> Index --> Artifacts --> Serve --> SPA
+```
+
+### Index production
+
+`kbx search-index` reads the knowledge graph, derives searchable units,
+generates embeddings through a pluggable provider, and writes **checked-in,
+deterministic artifacts** (`index-meta.json`, `units.json`, `vectors.json`) —
+the repository owns the search corpus; no hosted service is required to
+produce it. `kbx search-index --check` is a pure, no-API-call drift gate
+suitable for CI, the same checked-in-artifact-plus-drift-gate pattern kbx
+already uses for cross-source connection artifacts (see
+[history.md](history.md)).
+
+### Index consumption
+
+`kbx search-serve` (equivalently `npx @anokye-labs/kbexplorer-search serve
+--dir .search --port <port>`) loads the checked-in artifacts, builds an
+in-memory vector index, embeds incoming queries, and exposes a small HTTP
+contract (`GET /health`, `GET /stats`, `POST /search`) that returns
+kbexplorer-native results — node IDs, titles, paths, clusters, snippets,
+scores, and graph-aware context.
+[`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) is
+the reference consumer: its SPA calls `POST /search` against whatever service
+`VITE_SEARCH_SERVICE_URL` points at.
+
+### Access labels — search never evaluates principals
+
+Search respects the same access labels carried on nodes and edges: by
+default, restricted/confidential/unknown content produces no search unit and
+no vector at all (it cannot leak via search, not even a title), or can be
+opted into an index-but-label posture for host-side filtering. As everywhere
+else in kbx, kbx **labels**, the host **enforces** — search performs no
+principal evaluation of its own. See the [access labels section of the
+`kbexplorer-search` README](https://github.com/anokye-labs/kbexplorer-search#access-labels)
+for the exact contract; this document does not restate the types.
+
+### Status
+
+Tracked end to end by
+[kbexplorer-search#5](https://github.com/anokye-labs/kbexplorer-search/issues/5)
+("Epic: make kbexplorer-search a first-class part of the kbx system"). As of
+this writing, `kbexplorer-search` still inlines a mirror of the core graph
+types rather than depending on `@anokye-labs/kbexplorer-core` directly
+([search#7](https://github.com/anokye-labs/kbexplorer-search/issues/7)); the
+`serve` bin and template contract parity (`graphRanking` / `suggestions`)
+landed via
+[search#6](https://github.com/anokye-labs/kbexplorer-search/issues/6).
+
+---
+
 ## Cross-cutting — identity & relations
 
 Two small contracts keep representations of the same real-world entity lined up
@@ -419,6 +503,50 @@ across providers and layers:
   by `mapRelation` (unknown phrasings fall back to `structural`). It is the
   shared normalization target so the same prose resolves to the same relation in
   the CLI's JSON-LD and the SPA's graph alike.
+
+---
+
+## The do-seam — affordances as a protocol-neutral action layer
+
+Everything above is about **reading** the graph. kbx also has a **write/act**
+seam — the **DO-seam** — for the agent-driven surfaces (the CLI, the Copilot
+canvas). It is a separate, later-arriving layer on top of the four
+representation layers, not a fifth core layer: it lives entirely in
+[`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli), delivered by
+[kbexplorer#21 "Epic: Affordance action layer (the DO-seam), job layer and
+consent"](https://github.com/anokye-labs/kbexplorer/issues/21) (closed).
+
+### One choke point, many delivery adapters
+
+An **affordance** is a typed action — "given this context, what can I do, with
+what inputs/outputs?" — implemented once, behind one function:
+[`executeAffordance()`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/affordances/index.js).
+It knows nothing about MCP, JSON-RPC, HTTP, or canvases. Consent is enforced
+**inside** that one function
+([`src/affordances/consent.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/affordances/consent.js))
+— **fail-closed**: an affordance that requires consent and doesn't have it
+raises `CONSENT_REQUIRED`/`CONSENT_DENIED` rather than proceeding, regardless of
+which adapter called it.
+
+Three interchangeable adapters call the same choke point — none of them
+re-implement or bypass consent:
+
+| Adapter | Where | Notes |
+|---|---|---|
+| **Extension-tool adapter** (primary) | [`src/extension/tools.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/extension/tools.js) | Registers affordances as built-in `tools` in the **same** `joinSession({ canvases, tools })` call that ships the canvas — in-process, no MCP config exists or is consulted on this path. |
+| **MCP adapter** (optional) | [`src/mcp/server.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/mcp/server.js), [`src/mcp/tools.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/mcp/tools.js) | The same affordances exposed as an MCP server for non-canvas hosts (plain `copilot -p`, other agents/clients). MCP config only matters here. |
+| **Canvas do-seam adapter** | [`src/extension/canvas-server.js`](https://github.com/anokye-labs/kbexplorer-cli/blob/main/src/extension/canvas-server.js) `POST /affordance/:name` | The loopback HTTP route the embeddable canvas calls for its `anchor`/`expand`/`trace`/`filter` actions ([template#194 / A5](https://github.com/anokye-labs/kbexplorer-cli/issues/194)). Routes straight through `executeAffordance` — same fail-closed gate, third surface after extension-tools and MCP. |
+
+The dependency arrow is **`affordances → {extension-tool adapter, MCP adapter,
+canvas adapter}`** — never the other direction, and never affordances coupled
+to any one protocol. A **job layer**
+([`kbexplorer-cli#154`](https://github.com/anokye-labs/kbexplorer-cli/issues/154))
+sits alongside the contract for long-running work (generation, indexing) that a
+single stateless call can't express — progress, cancellation, and
+review/approval are job-layer concerns, not adapter concerns.
+
+See [surfaces.md](surfaces.md) for how the canvas adapter fits into the
+loopback contract end to end.
 
 ---
 
@@ -612,6 +740,7 @@ guard enforces for the built-ins.
 | Providers | [`provider.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/provider.ts) | [`src/engine/providers.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/providers.ts) · [`plugin-loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/plugin-loader.ts) |
 | Engine | [`graph.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/graph.ts) | [`loader.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/loader.ts) · [`orchestrator.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/orchestrator.ts) · [`transforms.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/engine/transforms.ts) |
 | Representation | [`representation.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/representation.ts) | [`src/representation/`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/registry.ts) |
+| Search (index production + consumption) | *(not yet — search#7)* | [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) (separate repo/package), driven by [`kbx search-index` / `kbx search-serve`](https://github.com/anokye-labs/kbexplorer-cli) → [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) SPA (`POST /search`) |
 | Identity / relations | [`identity.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/identity.ts) · [`relations.ts`](https://github.com/anokye-labs/kbexplorer-core/blob/main/src/relations.ts) | — |
 
 Related repos: the
