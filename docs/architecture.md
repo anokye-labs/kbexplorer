@@ -730,6 +730,19 @@ guard enforces for the built-ins.
 [`llm-context.ts`](https://github.com/anokye-labs/kbexplorer-template/blob/main/src/representation/targets/llm-context.ts)
 (an options-driven, budgeted target).
 
+### Bring your own viewer or lens
+
+Beyond whole new *targets*, a provider (or a site owner) can contribute the
+**render half** of a type — the viewers, block renderers, and named lenses that
+turn a node into a real visualization inside the `spa` / `copilot` targets —
+without editing core or the template. The contract is additive (provider API
+1.1.0): a data-only `.` entry stays framework-free while an optional `./views`
+entry ships the components, so render-free hosts (the CLI, the engine) never
+evaluate React. See
+[structured-file-visualization.md](structured-file-visualization.md) for the
+full design (canonical view-models, the `@anokye-labs/kbexplorer-view-kit`
+render contract, and site-local `views/` lenses).
+
 ---
 
 ## Where things live
