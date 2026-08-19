@@ -16,12 +16,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track kbexplorer-template release tags pinned in the showcase workflow",
       "managerFilePatterns": ["/^\\.github\\/workflows\\/showcase\\.yml$/"],
       "matchStrings": [
-        "(?<prefix>(?:^|\\r\\n|\\r|\\n)[ \\t]*)TEMPLATE_REF:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)(?<suffix>[ \\t]*(?:\\r\\n|\\r|\\n|$))"
+        "(?:^|\\r\\n|\\r|\\n)[ \\t]*TEMPLATE_REF:[ \\t]*v(?<currentValue>\\d+\\.\\d+\\.\\d+)[ \\t]*(?:\\r\\n|\\r|\\n|$)"
       ],
-      "autoReplaceStringTemplate": "{{{prefix}}}TEMPLATE_REF: v{{{newValue}}}{{{suffix}}}",
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "anokye-labs/kbexplorer-template",
       "versioningTemplate": "semver",
