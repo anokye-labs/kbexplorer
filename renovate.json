@@ -6,7 +6,7 @@
     {
       "groupName": "anokye-labs",
       "matchDatasources": ["npm"],
-      "matchPackagePatterns": ["^@anokye-labs/"]
+      "matchPackageNames": ["@anokye-labs/**"]
     },
     {
       "matchUpdateTypes": ["major"],
@@ -19,7 +19,7 @@
       "description": "Track kbexplorer-template release tags pinned in the showcase workflow",
       "managerFilePatterns": ["/\\.github\\/workflows\\/showcase\\.yml$/"],
       "matchStrings": [
-        "^(?<indent>\\s*)TEMPLATE_REF:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*$"
+        "(?:^|\\r\\n|\\r|\\n)[ \\t]*TEMPLATE_REF:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*(?:\\r\\n|\\r|\\n|$)"
       ],
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "anokye-labs/kbexplorer-template",
