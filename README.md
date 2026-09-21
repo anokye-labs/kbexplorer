@@ -7,13 +7,18 @@ This repo holds **no application code**. The code lives in:
 - [`kbexplorer-core`](https://github.com/anokye-labs/kbexplorer-core) — shared
   contracts (types, `kg://` identity, relation taxonomy, JSON-LD helpers, and the
   Source / Provider / Representation interfaces).
-- [`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli) — the CLI that
-  derives content, drives the explorer, and serves the embeddable Copilot canvas.
+- [`kbexplorer-engine`](https://github.com/anokye-labs/kbexplorer-engine) — the
+  graph assembly runtime: it resolves providers, orchestrates graph generation,
+  validates and assesses the assembled graph, and emits the canonical KBGraph.
+- [`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli) — the
+  orchestration and terminal layer: command dispatch, runtime routing, search and
+  MCP integration, and local graph utilities around the engine.
 - [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) — the
   SPA that renders a knowledge graph in the browser (and, additively, the
   embeddable canvas entry).
 - [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) — the
-  semantic-search companion module, driven through the CLI.
+  graph-derived search companion module that can serve vector or lexical search
+  artifacts and query results.
 - [`kbexplorer-provider-rich-markdown`](https://github.com/anokye-labs/kbexplorer-provider-rich-markdown) —
   the loadable provider that ingests a rich-Markdown document into a graph
   fragment.

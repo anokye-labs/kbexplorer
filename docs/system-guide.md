@@ -44,27 +44,33 @@ The verified repository topology for KBX is:
 
 - [`kbexplorer`](https://github.com/anokye-labs/kbexplorer) — docs, showcase host, public architecture narrative, and integration hub
 - [`kbexplorer-core`](https://github.com/anokye-labs/kbexplorer-core) — dependency-free contracts and canonical types
-- [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) — indexing/query/search engine companion built over graph data
+- [`kbexplorer-engine`](https://github.com/anokye-labs/kbexplorer-engine) — graph assembly runtime that resolves providers, orchestrates graph generation, validates/assesses the graph, and emits the canonical `KBGraph`
+- [`kbexplorer-search`](https://github.com/anokye-labs/kbexplorer-search) — indexing/query/search companion built over graph data, with vector/embedding and lexical/BM25 alternative paths
 - [`kbexplorer-provider-rich-markdown`](https://github.com/anokye-labs/kbexplorer-provider-rich-markdown) — provider that ingests rich Markdown into graph fragments
-- [`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli) — CLI and integration layer for deriving content, serving the embeddable canvas, and driving graph-related workflows
+- [`kbexplorer-cli`](https://github.com/anokye-labs/kbexplorer-cli) — CLI and runtime orchestration layer for command dispatch, local graph utilities, search commands, and MCP/terminal integration
 - [`kbexplorer-template`](https://github.com/anokye-labs/kbexplorer-template) — the browser rendering layer, viewer registration, and built-in representation targets
 
 ```mermaid
 flowchart LR
   HUB["kbexplorer\nhub docs + showcase"]
   CORE["kbexplorer-core\ncontracts & identity/access"]
-  CLI["kbexplorer-cli\nhigh-level orchestration"]
-  SEARCH["kbexplorer-search\nindex + query + HTTP"]
+  ENGINE["kbexplorer-engine\ngraph assembly + validation"]
+  CLI["kbexplorer-cli\ncommand dispatch + runtime orchestration"]
+  SEARCH["kbexplorer-search\nindex + query + optional HTTP"]
   RMD["kbexplorer-provider-rich-markdown\nprovider lifecycle"]
   TEMPLATE["kbexplorer-template\nrendering + viewers"]
 
+  CORE --> ENGINE
   CORE --> CLI
   CORE --> SEARCH
   CORE --> RMD
   CORE --> TEMPLATE
 
-  CLI -->|builds/derives graph artifacts| TEMPLATE
-  RMD -->|implements provider contract| CLI
+  ENGINE -->|builds / validates KBGraph| CLI
+  ENGINE -->|provides graph artifact| SEARCH
+  ENGINE -->|emits graph for| TEMPLATE
+  CLI -->|routes commands + terminal behavior| TEMPLATE
+  RMD -->|implements provider contract| ENGINE
   SEARCH -->|graph-derived query layer| TEMPLATE
   HUB -->|documents system + hosts showcase| TEMPLATE
 ```
@@ -124,17 +130,24 @@ flowchart TB
   G --> R
 ```
 
-## 4. Engine responsibilities: high-level scope only
+## 4. Engine responsibilities: graph assembly, validation, and provider execution
 
-The Engine is the assembly path that resolves providers and emits a pure `KBGraph`. This is the verified high-level role from the hub docs.
+The Engine is the runtime assembly path that resolves providers, orchestrates graph creation, and emits a pure `KBGraph`. Verified source evidence from `kbexplorer-engine` shows the package exports and responsibilities directly:
+
+- `src/index.ts` re-exports `ProviderRegistry`, `GraphProvider`, `ProviderResult`, `registerProviders`, `loadKnowledgeBase`, `validateGraph`, `assessGraph`, `buildManifest`, and the catalogue helpers `deriveNeeds`, `compareContent`, and `enrichFromManifest`.
+- `src/providers.ts` defines `ProviderRegistry` and `getExecutionOrder()`, which orders providers by dependency-safe execution order before graph assembly.
+- `src/loader.ts` defines `registerProviders(registry, data)` and `loadKnowledgeBase(source, config)`, showing that the engine wires providers from normalized `RepoData` and then runs the shared transform stage.
+- `src/orchestrator.ts` exports `collectProviderNodes` and `orchestrate`, which are the graph-orchestration functions and make the assembly role explicit.
+- `buildManifest` and the catalogue helpers are not UI code; they are pure data-shaping utilities that operate on graph/source data and then hand the result to downstream consumers.
 
 The protected boundary is important:
 
 - the Engine is not a place for UI or presentation logic
 - the Engine composes provider output into a graph and exposes the pure graph artifact downstream
 - the Engine is the runtime glue between source adapters and representation consumers
+- graph validation, assessment, manifest creation, and catalogue derivation are all engine-side responsibilities, not CLI-owned behavior
 
-The hub architecture documents already describe this as the central assembly layer. No deeper API surface is invented here because the Engine session was not available for direct package-local inspection. Where the engine is referenced in package docs, the guide treats it as a high-level role and ties you to the local repo references rather than re-describing internals.
+The package-local source also distinguishes the engine from the CLI: the engine is the code that creates and validates the graph, while the CLI handles command routing and terminal/runtime behaviors around that graph. This is the correct boundary to preserve in the doc set and is supported by the sibling repo exports and runtime structure.
 
 ## 5. Provider lifecycle and the Rich Markdown graph-fragment model
 
@@ -193,7 +206,7 @@ This separation is important: the provider is responsible for structured graph e
 
 ## 6. Search indexing, query, and HTTP data flow
 
-The verified `kbexplorer-search` package docs show a concrete search pipeline that is graph-derived and queryable over HTTP.
+The verified `kbexplorer-search` package docs show a concrete search pipeline that is graph-derived, with search artifacts and query results available in library code as well as optional HTTP serving.
 
 The key public APIs and types identified in the package docs are:
 
@@ -211,40 +224,64 @@ The key public APIs and types identified in the package docs are:
 - `applyGraphRanking`
 - `SearchUnit`, `SearchResult`, `SearchOptions`, `EmbeddingArtifact`, `IndexMeta`, `LexicalIndex`, `SearchEngine`, `SearchRequestBody`
 
-The verified flow is:
+The important correction is that search is not a single mandatory data path. The architecture supports alternative or complementary strategies:
 
-`KBGraph` → `extractSearchUnits()` → `SearchUnit[]` → `generateEmbeddings()` / `writeArtifacts()` → engine selection (cosine / lexical / FAISS) → `SearchResult[]` → HTTP `/search` response
+- vector / embedding-based search via `generateEmbeddings()` / `createFaissEngine()` / `writeArtifacts()`
+- lexical / BM25-style search via `createLexicalSearchEngine()` and lexical indices
+- both produce `SearchResult[]` for consumers, and either path may feed an optional HTTP server layer
+
+The verified flow is therefore not “embeddings + `/search` are required for all deployments”; instead it is:
+
+`KBGraph` → `extractSearchUnits()` → `SearchUnit[]` → vector or lexical artifacts/indexes → `SearchResult[]` → optional HTTP `/search` or direct library consumption
 
 ### Search pipeline diagram
 
 ```mermaid
 flowchart LR
   G["KBGraph"] --> U["extractSearchUnits()"]
-  U --> E["generateEmbeddings()"]
+  U --> V["vector / embedding path"]
+  U --> L["lexical / BM25 path"]
+
+  V --> E["generateEmbeddings()"]
   E --> A["writeArtifacts() / readArtifacts()"]
-  A --> S["createSearchEngine()\ncreateLexicalSearchEngine()\ncreateFaissEngine()"]
-  S --> Q["SearchRequestBody\nquery + filters + ranking"]
+  L --> I["lexical index artifacts"]
+
+  A --> S1["createSearchEngine()\ncreateFaissEngine()"]
+  I --> S2["createLexicalSearchEngine()"]
+  S1 --> Q["SearchRequestBody\nquery + filters + ranking"]
+  S2 --> Q
   Q --> R["SearchResult[]"]
-  R --> H["HTTP /search response"]
+  R --> C["direct library consumer"]
+  R --> H["optional HTTP /search response"]
 
   ACC["resolveAccessConfig\nisExcludedByAccess\nDEFAULT_ACCESS_EXCLUSION"] -. access gating .-> A
+  ACC -. access gating .-> I
   RANK["applyGraphRanking()"] -. ranking .-> R
 ```
 
-This search layer is intentionally a graph-derived representation, not the canonical source of truth. It is based on the graph, and access configuration is applied as part of the indexing/query semantics.
+This search layer is intentionally a graph-derived representation, not the canonical source of truth. It operates on graph-derived artifacts and can be exposed directly to library clients or through an optional search HTTP server without implying that embeddings or HTTP access are mandatory architecture requirements for every deployment.
 
-## 7. CLI role: documented high-level scope only
+## 7. CLI role: command dispatcher and runtime router
 
-The hub docs and package-local guidance confirm that the CLI is a high-level orchestration and integration layer. It sits close to the system boundary: driving graph tooling, search workflows, and the embeddable canvas server. The CLI is not the canonical contract layer and is not the representation target.
+The CLI is the shell-facing orchestration layer. Verified source evidence from `kbexplorer-cli` shows it is a dispatcher layer around the engine and the runtime packages, not the place where the graph is assembled.
 
-The current verified CLI roles include:
+The canonical evidence is clear:
 
-- deriving content and driving the explorer workflow
-- serving the embeddable Copilot canvas over a loopback HTTP server
-- working with search-related commands and graph-manifest workflows
-- integrating the template and runtime package boundaries
+- `bin/cli.js` is a tiny entrypoint that imports `./kbx.js`, which is the runtime bootstrap for the command surface.
+- `src/cli.ts` is the command router / runtime integration layer responsible for dispatching commands and local runtime behavior.
+- the documented command surface includes commands such as `init`, `generate`, `dev`, `build`, `manifest`, `update`, `links`, `audit`, `validate`, `affected`, `scaffold`, `derive`, `connect`, `sync`, `doctor`, `plugin`, `search-index`, `search`, and `mcp`.
+- the runtime contract distinguishes between a command surface and a router: command logic is bound to a runtime dispatcher, while the actual graph assembly and validation belongs to the engine package.
+- the CLI docs also describe a `manifest` template-script-first flow with a `generateManifest` fallback, plus local graph utilities and search/index commands; they do not attribute graph construction to the CLI itself.
+- the MCP server is injected as an SDK-neutral server registration function, which is a runtime integration concern rather than a graph-building responsibility.
 
-Because no live CLI session could be created, this guide is intentionally bounded to those confirmed high-level responsibilities and points to repo-local references rather than enumerating deeper CLI internals that were not independently available.
+This means the CLI is responsible for:
+
+- exposing the user-facing command surface
+- routing commands to the relevant runtime path
+- handling terminal output, exit behavior, and local process-level workflows
+- integrating with manifest generation, search, plugin, and MCP runtime surfaces
+
+It is not the canonical graph-building layer. The graph build, provider resolution, validation, assessment, and manifest shaping are engine responsibilities. The CLI is the layer that calls into those functions and surfaces them through local commands and terminal behavior.
 
 ## 8. Template loading, rendering, and viewer architecture
 
